@@ -1,0 +1,105 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version label (used in ZIP filename). Required when running manually."
+        required: true
+        default: "0.0.0"
+
+jobs:
+  build:
+    runs-on: macos-14
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "value=${{ inputs.version }}" >> "$GITHUB_OUTPUT"
+          else
+            # strip leading "v" from tag (v1.0.0 -> 1.0.0)
+            echo "value=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode.app
+
+      - name: Build and package
+        run: ./Scripts/package.sh "${{ steps.version.outputs.value }}"
+
+      - name: Compute sha256
+        id: sha
+        run: |
+          SHA=$(shasum -a 256 "dist/UsageDeck-${{ steps.version.outputs.value }}.zip" | awk '{print $1}')
+          echo "value=$SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: UsageDeck-${{ steps.version.outputs.value }}
+          path: dist/UsageDeck-${{ steps.version.outputs.value }}.zip
+          if-no-files-found: error
+
+      - name: Publish GitHub Release
+        if: github.event_name == 'push'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/UsageDeck-${{ steps.version.outputs.value }}.zip
+          generate_release_notes: true
+          body: |
+            ## Install via Homebrew (recommended)
+
+            ```bash
+            brew tap roobann/usagedeck
+            brew install --cask usage-deck
+            ```
+
+            Homebrew strips the quarantine attribute, so the app launches without Gatekeeper prompts.
+
+            ## Install manually
+
+            1. Download the ZIP below and unzip it.
+            2. Drag **Usage Deck.app** to `/Applications`.
+            3. This release is ad-hoc signed, so the first launch is blocked by Gatekeeper.
+               Clear the quarantine flag and launch:
+
+               ```bash
+               xattr -dr com.apple.quarantine "/Applications/Usage Deck.app"
+               open "/Applications/Usage Deck.app"
+               ```
+
+      - name: Bump Homebrew tap
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          VERSION: ${{ steps.version.outputs.value }}
+          SHA: ${{ steps.sha.outputs.value }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "HOMEBREW_TAP_TOKEN secret not set — skipping tap bump."
+            exit 0
+          fi
+          git clone --depth 1 "https://x-access-token:${GH_TOKEN}@github.com/roobann/homebrew-usagedeck.git" tap
+          mkdir -p tap/Casks
+          sed -e "s#__VERSION__#${VERSION}#g" -e "s#__SHA256__#${SHA}#g" \
+            Scripts/cask-template.rb > tap/Casks/usage-deck.rb
+          cd tap
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Casks/usage-deck.rb
+          if git diff --cached --quiet; then
+            echo "Cask already up to date."
+          else
+            git commit -m "usage-deck ${VERSION}"
+            git push origin HEAD
+          fi

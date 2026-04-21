@@ -1,0 +1,43 @@
+# Build artifacts
+.build/
+.swiftpm/
+DerivedData/
+*.xcodeproj
+xcuserdata/
+
+# App bundle (built locally)
+UsageDeck.app/
+Usage Deck.app/
+*.app
+
+# Release artifacts
+dist/
+
+# macOS
+.DS_Store
+*.dSYM
+
+# IDE
+.idea/
+*.swp
+*.swo
+*~
+
+# Logs
+*.log
+
+# Environment
+.env
+.env.local
+
+# Test artifacts
+*.xcresult
+
+# Archives
+*.zip
+*.tar.gz
+*.dmg
+
+# Signing
+*.p12
+*.mobileprovision
