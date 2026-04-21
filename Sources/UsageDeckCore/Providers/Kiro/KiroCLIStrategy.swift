@@ -85,9 +85,22 @@ public struct KiroCLIStrategy: ProviderFetchStrategy, Sendable {
         config.readonly = true
         let queue = try DatabaseQueue(path: dbPath.path, configuration: config)
 
-        let tokenJSON = try queue.read { db in
-            try String.fetchOne(db, sql: "SELECT value FROM auth_kv WHERE key = ?", arguments: ["kirocli:social:token"])
-                ?? String.fetchOne(db, sql: "SELECT value FROM auth_kv WHERE key = ?", arguments: ["kirocli:idc:token"])
+        // Token keys kiro-cli uses, one per auth flow. Order is intentional:
+        // social sign-in (GitHub/Google) wins if present, then IdC (old key),
+        // then OIDC device flow used by current IAM Identity Center setups
+        // (kiro-cli's own spelling — `odic`, not `oidc`).
+        let tokenKeys = [
+            "kirocli:social:token",
+            "kirocli:idc:token",
+            "kirocli:odic:token",
+        ]
+        let tokenJSON = try queue.read { db -> String? in
+            for key in tokenKeys {
+                if let value = try String.fetchOne(db, sql: "SELECT value FROM auth_kv WHERE key = ?", arguments: [key]) {
+                    return value
+                }
+            }
+            return nil
         }
         guard let tokenJSON,
               let tokenData = tokenJSON.data(using: .utf8),

@@ -6,6 +6,12 @@ All notable changes to UsageDeck are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.1.1] — 2026-04-21
+
+### Fixed
+- Kiro: recognize kiro-cli's OIDC device-flow token (`kirocli:odic:token`) used by enterprise IAM Identity Center setups. Previously only social sign-in (`kirocli:social:token`) and the legacy `kirocli:idc:token` were checked, so enterprise users saw "Setup Required" even after a successful `kiro-cli login`.
+- Align `CFBundleShortVersionString` with the GitHub Release tag (was stuck at 1.0.0 while releases were versioned 0.1.x).
+
 ## [0.1.0] — 2026-04-21
 
 ### Added
